@@ -3,6 +3,7 @@
 
 drop table if exists public.orders cascade;
 drop table if exists public.customers cascade;
+drop table if exists public.ml_scoring_config cascade;
 
 create table public.customers (
   customer_id serial primary key,
@@ -42,5 +43,20 @@ create table public.orders (
   scored_at timestamptz
 );
 
+-- Serialized model weights for /api/score (trained by scripts/train_from_supabase.py)
+create table public.ml_scoring_config (
+  id integer primary key default 1 check (id = 1),
+  config jsonb not null,
+  trained_at timestamptz not null default now(),
+  metrics jsonb
+);
+
 alter table public.customers disable row level security;
 alter table public.orders disable row level security;
+
+-- PostgREST (anon / service_role JWTs) must be able to use schema public
+grant usage on schema public to anon, authenticated, service_role;
+grant all on all tables in schema public to anon, authenticated, service_role;
+grant all on all sequences in schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;

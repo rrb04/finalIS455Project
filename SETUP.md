@@ -3,7 +3,9 @@
 This project has:
 
 - **`web/`** — Next.js app (deploy this to Vercel). It talks to **Supabase** (Postgres). It does **not** run Python; scoring runs in a Node API route (your real model is trained in the notebook).
-- **`pipeline.ipynb`** — CRISP-DM notebook; uses **`shop.db`** in this folder (SQLite). Your real file has `customers` (`full_name`, `email`, …) and `orders` (`order_total`, `risk_score`, `is_fraud`, …).
+- **`pipeline.ipynb`** — CRISP-DM notebook. By default it reads **`shop.db`** (SQLite). You can point it at **Supabase** instead (same `orders`/`customers` join as production) with `DATA_SOURCE=supabase` and `DATABASE_URL` set to your Postgres connection string.
+- **`scripts/train_from_supabase.py`** — Trains a **logistic fraud model** on all labeled rows in Supabase and saves weights into **`ml_scoring_config`** so **`/api/score`** can use them (Python does not run on Vercel).
+- **`supabase/ml_scoring_config.sql`** — Adds the `ml_scoring_config` table (run once if you already applied an older `schema.sql` without this table). Fresh installs: **`schema.sql`** already includes it.
 - **`supabase/seed.sql`** — Generated from your **`shop.db`** (`python scripts/generate_seed_sql.py`). Run in Supabase after **`schema.sql`** so Postgres matches SQLite.
 - **`create_shop_db.py`** — Optional: writes **`shop_synthetic.db`** only (never overwrites **`shop.db`**).
 
@@ -68,19 +70,43 @@ If you see database errors, re-check that `schema.sql` ran and `.env.local` has 
 
 ---
 
-## Part D — Jupyter notebook + `shop.db` (Part 2 of the assignment)
+## Part D — Jupyter notebook + data source
 
 1. Install Python (3.10+) and Jupyter if needed.
-2. Keep your real **`shop.db`** next to **`pipeline.ipynb`**. (Optional test DB: `python create_shop_db.py` writes **`shop_synthetic.db`** only — point the notebook at it by changing `DB_PATH` if you use that file.)
-3. Install notebook dependencies (examples — adjust if your class uses a conda env):
+2. **Option A — Local SQLite (default):** Keep **`shop.db`** next to **`pipeline.ipynb`**. (Optional test DB: `python create_shop_db.py` writes **`shop_synthetic.db`** — change `DB_PATH` if you use that file.)
+3. **Option B — Supabase (same data as production):** In Supabase → **Project Settings** → **Database**, copy the **URI** connection string. Before starting Jupyter, set environment variables (PowerShell example):
 
-```bash
-pip install pandas numpy scikit-learn xgboost matplotlib seaborn scipy statsmodels joblib
+```powershell
+$env:DATA_SOURCE = "supabase"
+$env:DATABASE_URL = "postgresql://postgres:YOUR_PASSWORD@db.YOUR_REF.supabase.co:5432/postgres"
 ```
 
-4. Start Jupyter, open **`pipeline.ipynb`**, run all cells. Upload the completed **`.ipynb`** where your course asks.
+4. Install notebook dependencies (add **`psycopg2-binary`** if you use Option B):
 
-**Note:** The live website uses **Supabase**, not `shop.db`. The notebook uses **`shop.db`** locally so you can do CRISP-DM and train/export models without Python on Vercel.
+```bash
+pip install pandas numpy scikit-learn xgboost matplotlib seaborn scipy statsmodels joblib psycopg2-binary
+```
+
+5. Start Jupyter, open **`pipeline.ipynb`**, run all cells. Upload the completed **`.ipynb`** where your course asks.
+
+The live site always uses **Supabase**. The notebook can use either **`shop.db`** or Supabase so your EDA matches production when you want it to.
+
+---
+
+## Part E — Daily fraud model in production (optional but recommended)
+
+Training stays **off Vercel** (e.g. your laptop or GitHub Actions). The app **reads** stored coefficients from Postgres.
+
+1. In Supabase **SQL Editor**, run **`supabase/ml_scoring_config.sql`** once if that table is missing (skip if you re-ran the full **`schema.sql`** that already creates `ml_scoring_config`).
+2. Install training deps: `pip install -r scripts/requirements-train.txt`.
+3. Set **`DATABASE_URL`** to the same Postgres URI as in Part D Option B, then run:
+
+```bash
+python scripts/train_from_supabase.py
+```
+
+4. After a successful run, **Run scoring** on **`/admin`** uses the trained model. If no row exists in **`ml_scoring_config`**, scoring falls back to the built-in heuristic.
+5. **Automated daily retrain:** add **`DATABASE_URL`** as a **GitHub Actions secret** on your repo. The workflow **`.github/workflows/daily-fraud-train.yml`** runs on a schedule (and can be triggered manually). Adjust the cron time if you prefer a different UTC hour.
 
 ---
 
@@ -92,7 +118,8 @@ pip install pandas numpy scikit-learn xgboost matplotlib seaborn scipy statsmode
 | Place order → saved to DB | `/order` + Supabase `orders` table |
 | Admin order history | `/admin` |
 | Run scoring → refresh priority queue | **Run scoring** on `/admin` |
-| Notebook CRISP-DM + `is_fraud` | `pipeline.ipynb` + `shop.db` |
+| Notebook CRISP-DM + `is_fraud` | `pipeline.ipynb` + `shop.db` (or Supabase via `DATA_SOURCE`) |
+| Daily fraud model → live scoring | `scripts/train_from_supabase.py` + `ml_scoring_config` table |
 | Live URL | Your Vercel **Production** link |
 
 ---
@@ -103,6 +130,7 @@ pip install pandas numpy scikit-learn xgboost matplotlib seaborn scipy statsmode
 - **“Missing … SUPABASE_SERVICE_ROLE_KEY”** — Add all three env vars to **`web/.env.local`** (local) **or** Vercel → **Settings → Environment Variables** (production). After changing Vercel env vars, **Redeploy**. Local: restart `npm run dev` after editing `.env.local`.
 - **“relation … does not exist” / schema cache** — In Supabase **SQL Editor**, run **`supabase/schema.sql`**, then **`supabase/seed.sql`**, in that order. Tables must exist before the app can read them.
 - **Works locally but not on Vercel** — Vercel does not read `.env.local`; you must set the same variables in the Vercel project and redeploy.
+- **“permission denied for schema public”** — In Supabase → **SQL Editor**, run **`supabase/grants_public.sql`** (grants the API roles access to the `public` schema). Then reload the app.
 - **Empty customer list (no error)** — Seed data missing; run **`seed.sql`** or insert rows into `customers`.
 - **Build fails on Vercel** — **Root Directory** = **`web`**.
 

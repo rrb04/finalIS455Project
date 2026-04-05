@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import { apiErrorMessage } from "@/lib/apiError";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  isValidScoringConfig,
+  riskScoreFromConfig,
+} from "@/lib/scoringFromConfig";
 
 /**
- * Deployment-friendly risk scoring (no Python on Vercel).
- * Outputs 0–100 to match shop.db `risk_score` scale.
- * Train the real model in pipeline.ipynb; this keeps the live app working.
+ * Risk scoring without Python on Vercel.
+ * If `ml_scoring_config` has a row (from daily `train_from_supabase.py`), uses
+ * those logistic coefficients; otherwise falls back to a static heuristic.
  */
 const MAX_TOTAL = 2053.11;
 
-function scoreRow(orderTotal: number, segment: string | null): number {
+function scoreRowHeuristic(orderTotal: number, segment: string | null): number {
   const amt = Math.min(70, (orderTotal / MAX_TOTAL) * 70);
   const seg = (segment ?? "").toLowerCase();
   let segPart = 22;
@@ -23,6 +27,25 @@ function scoreRow(orderTotal: number, segment: string | null): number {
 export async function POST() {
   try {
     const supabase = getSupabaseAdmin();
+
+    const { data: cfgRow, error: cfgErr } = await supabase
+      .from("ml_scoring_config")
+      .select("config")
+      .eq("id", 1)
+      .maybeSingle();
+    let mlCfg: unknown;
+    if (cfgErr) {
+      const hint = apiErrorMessage(cfgErr);
+      if (/does not exist|schema cache|Could not find the table/i.test(hint)) {
+        console.warn("POST /api/score: ml_scoring_config unavailable, using heuristic:", hint);
+      } else {
+        console.error("POST /api/score ml_scoring_config", cfgErr);
+        return NextResponse.json({ error: hint }, { status: 500 });
+      }
+    } else {
+      mlCfg = cfgRow?.config;
+    }
+
     const { data: orders, error: oErr } = await supabase
       .from("orders")
       .select("order_id, customer_id, order_total");
@@ -42,10 +65,17 @@ export async function POST() {
     );
 
     const scored = (orders ?? []).map((o) => {
-      const risk_score = scoreRow(
-        Number(o.order_total),
-        segById.get(o.customer_id) ?? null,
-      );
+      const total = Number(o.order_total);
+      const segment = segById.get(o.customer_id) ?? null;
+      if (isValidScoringConfig(mlCfg)) {
+        const { risk_score, needs_review } = riskScoreFromConfig(
+          total,
+          segment,
+          mlCfg,
+        );
+        return { order_id: o.order_id, risk_score, needs_review };
+      }
+      const risk_score = scoreRowHeuristic(total, segment);
       return {
         order_id: o.order_id,
         risk_score,
