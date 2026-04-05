@@ -6,6 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / "shop.db"
 OUT = ROOT / "supabase" / "seed.sql"
 
+# Keep each INSERT small enough for Supabase SQL Editor / PostgREST limits.
+ORDERS_PER_BATCH = 800
+
 
 def esc(s):
     if s is None:
@@ -18,12 +21,12 @@ def main():
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    c.execute("SELECT * FROM customers WHERE customer_id <= 15 ORDER BY customer_id")
+    c.execute("SELECT * FROM customers ORDER BY customer_id")
     rows = c.fetchall()
 
     lines = [
-        "-- Generated from shop.db — subset for Supabase demo.",
-        "-- Run after schema.sql. Resets IDs to match SQLite sample.",
+        "-- Generated from shop.db — full export (all customers + all orders).",
+        "-- Run after schema.sql. Resets IDs to match SQLite.",
         "",
         "truncate table public.orders, public.customers restart identity cascade;",
         "",
@@ -57,19 +60,13 @@ def main():
     )
     lines.append("")
 
-    c.execute(
-        "SELECT * FROM orders WHERE customer_id <= 15 ORDER BY order_id LIMIT 30"
-    )
+    c.execute("SELECT * FROM orders ORDER BY order_id")
     orows = c.fetchall()
-    lines.append(
-        "INSERT INTO public.orders (order_id, customer_id, order_datetime, billing_zip, shipping_zip, shipping_state, payment_method, device_type, ip_country, promo_used, promo_code, order_subtotal, shipping_fee, tax_amount, order_total, risk_score, is_fraud, needs_review, priority_rank, scored_at) VALUES"
-    )
-    ovals = []
-    for r in orows:
-        d = dict(r)
+
+    def order_row_sql(d: dict) -> str:
         promo = "NULL" if d["promo_code"] is None else esc(d["promo_code"])
         odt = str(d["order_datetime"]).replace(" ", "T")
-        ovals.append(
+        return (
             "(%d, %d, %s::timestamptz, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, NULL)"
             % (
                 d["order_id"],
@@ -91,8 +88,20 @@ def main():
                 d["is_fraud"],
             )
         )
-    lines.append(",\n".join(ovals) + ";")
-    lines.append("")
+
+    insert_header = (
+        "INSERT INTO public.orders (order_id, customer_id, order_datetime, billing_zip, shipping_zip, "
+        "shipping_state, payment_method, device_type, ip_country, promo_used, promo_code, order_subtotal, "
+        "shipping_fee, tax_amount, order_total, risk_score, is_fraud, needs_review, priority_rank, scored_at) VALUES"
+    )
+
+    for i in range(0, len(orows), ORDERS_PER_BATCH):
+        chunk = orows[i : i + ORDERS_PER_BATCH]
+        ovals = [order_row_sql(dict(r)) for r in chunk]
+        lines.append(insert_header)
+        lines.append(",\n".join(ovals) + ";")
+        lines.append("")
+
     lines.append(
         "SELECT setval(pg_get_serial_sequence('public.orders','order_id'), (SELECT MAX(order_id) FROM public.orders));"
     )
@@ -100,7 +109,7 @@ def main():
 
     OUT.write_text("\n".join(lines), encoding="utf-8")
     conn.close()
-    print(f"Wrote {OUT}")
+    print(f"Wrote {OUT} ({len(rows)} customers, {len(orows)} orders)")
 
 
 if __name__ == "__main__":
