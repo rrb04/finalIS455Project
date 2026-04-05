@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiErrorMessage } from "@/lib/apiError";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 /**
@@ -25,11 +26,17 @@ export async function POST() {
     const { data: orders, error: oErr } = await supabase
       .from("orders")
       .select("order_id, customer_id, order_total");
-    if (oErr) throw oErr;
+    if (oErr) {
+      console.error("POST /api/score orders", oErr);
+      return NextResponse.json({ error: apiErrorMessage(oErr) }, { status: 500 });
+    }
     const { data: customers, error: cErr } = await supabase
       .from("customers")
       .select("customer_id, customer_segment");
-    if (cErr) throw cErr;
+    if (cErr) {
+      console.error("POST /api/score customers", cErr);
+      return NextResponse.json({ error: apiErrorMessage(cErr) }, { status: 500 });
+    }
     const segById = new Map(
       (customers ?? []).map((c) => [c.customer_id, c.customer_segment as string]),
     );
@@ -63,7 +70,10 @@ export async function POST() {
           scored_at: row.scored_at,
         })
         .eq("order_id", row.order_id);
-      if (error) throw error;
+      if (error) {
+        console.error("POST /api/score update", error);
+        return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
+      }
     }
 
     return NextResponse.json({
@@ -72,7 +82,7 @@ export async function POST() {
       top: withRank.slice(0, 5),
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Scoring failed";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("POST /api/score", e);
+    return NextResponse.json({ error: apiErrorMessage(e) }, { status: 500 });
   }
 }

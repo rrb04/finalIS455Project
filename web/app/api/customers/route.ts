@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiErrorMessage } from "@/lib/apiError";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET() {
@@ -8,10 +9,13 @@ export async function GET() {
       .from("customers")
       .select("customer_id, full_name, email, city, state, customer_segment")
       .order("customer_id");
-    if (error) throw error;
+    if (error) {
+      console.error("GET /api/customers", error);
+      return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
+    }
     return NextResponse.json({ customers: data ?? [] });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to load customers";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("GET /api/customers", e);
+    return NextResponse.json({ error: apiErrorMessage(e) }, { status: 500 });
   }
 }
