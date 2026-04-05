@@ -35,20 +35,57 @@ WHERE o.is_fraud IN (0, 1)
 """
 
 
-def encode_password_in_postgres_url(url: str) -> str:
-    """
-    URI passwords must percent-encode special characters (e.g. % -> %25).
-    Raw '%' in a Supabase password breaks psycopg2.parse_dsn with "invalid percent-encoded token".
-    """
+def _split_postgres_url(url: str) -> tuple[str, str, str] | None:
+    """Return (scheme, userinfo, hostpart) or None if not a postgres URL."""
     for scheme in ("postgresql://", "postgres://"):
         if url.startswith(scheme):
             rest = url[len(scheme) :]
             break
     else:
-        return url
+        return None
     if "@" not in rest:
-        return url
+        return None
     userinfo, hostpart = rest.rsplit("@", 1)
+    return scheme, userinfo, hostpart
+
+
+def extract_password_from_postgres_url(url: str) -> str | None:
+    parts = _split_postgres_url(url)
+    if not parts:
+        return None
+    _, userinfo, _ = parts
+    if ":" not in userinfo:
+        return None
+    _, password = userinfo.split(":", 1)
+    return password
+
+
+def password_has_invalid_percent_escape(password: str) -> bool:
+    """True if password contains '%' not followed by two hex digits (invalid in a URI)."""
+    hex_digits = set("0123456789abcdefABCDEF")
+    i = 0
+    n = len(password)
+    while i < n:
+        if password[i] != "%":
+            i += 1
+            continue
+        if i + 2 >= n:
+            return True
+        if password[i + 1] not in hex_digits or password[i + 2] not in hex_digits:
+            return True
+        i += 3
+    return False
+
+
+def encode_password_in_postgres_url(url: str) -> str:
+    """
+    URI passwords must percent-encode special characters (e.g. % -> %25).
+    Raw '%' in a Supabase password breaks psycopg2.parse_dsn with "invalid percent-encoded token".
+    """
+    parts = _split_postgres_url(url)
+    if not parts:
+        return url
+    scheme, userinfo, hostpart = parts
     if ":" not in userinfo:
         return url
     user, password = userinfo.split(":", 1)
@@ -56,9 +93,13 @@ def encode_password_in_postgres_url(url: str) -> str:
 
 
 def connect_postgres(url: str):
+    # If password has a raw % that is not valid %XX, psycopg2 fails before we can try/except.
+    pw = extract_password_from_postgres_url(url)
+    if pw is not None and password_has_invalid_percent_escape(pw):
+        return psycopg2.connect(encode_password_in_postgres_url(url))
     try:
         return psycopg2.connect(url)
-    except psycopg2.ProgrammingError as e:
+    except psycopg2.Error as e:
         msg = str(e).lower()
         if "percent" in msg or "invalid dsn" in msg:
             fixed = encode_password_in_postgres_url(url)
