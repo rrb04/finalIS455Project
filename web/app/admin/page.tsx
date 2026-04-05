@@ -194,10 +194,10 @@ export default function AdminPage() {
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
             Administrator — fraud review queue
           </h1>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
             Risk is on a 0–100 scale (higher = more suspicious). New orders are
             saved first; scores are filled when you run the model below.
           </p>
@@ -248,7 +248,7 @@ export default function AdminPage() {
             least once.
           </li>
         </ol>
-        <p className="mt-2 text-xs text-zinc-600">
+        <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-500">
           Training new model weights is separate (e.g. GitHub Actions); this
           button only <em>applies</em> the saved model to orders.
         </p>
@@ -332,13 +332,13 @@ export default function AdminPage() {
                       <button
                         type="button"
                         onClick={() => onSortHeaderClick(col.id)}
-                        className={`inline-flex w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-zinc-200/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 dark:hover:bg-zinc-800 ${
+                        className={`inline-flex w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left text-zinc-700 transition-colors hover:bg-zinc-200/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 dark:text-zinc-300 dark:hover:bg-zinc-800 ${
                           col.align === "right"
                             ? "justify-end"
                             : col.align === "center"
                               ? "justify-center"
                               : "justify-start"
-                        } ${active ? "text-zinc-900 dark:text-zinc-100" : ""}`}
+                        } ${active ? "font-semibold text-zinc-900 dark:text-white" : ""}`}
                       >
                         <span>{col.label}</span>
                         <span
@@ -370,25 +370,25 @@ export default function AdminPage() {
                     className="border-t border-zinc-100 hover:bg-zinc-50/80 dark:border-zinc-800 dark:hover:bg-zinc-900/60"
                   >
                     <td className="px-4 py-3 text-right align-middle">
-                      <span className="inline-block min-w-[2rem] text-lg font-bold text-zinc-950">
+                      <span className="inline-block min-w-[2rem] text-lg font-bold text-zinc-950 dark:text-zinc-100">
                         {o.priority_rank ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right align-middle">
-                      <span className="text-lg font-semibold text-zinc-950">
+                      <span className="text-lg font-semibold text-zinc-950 dark:text-zinc-100">
                         {o.order_id}
                       </span>
                     </td>
                     <td className="px-4 py-3 align-middle">
-                      <span className="font-medium text-zinc-900">
+                      <span className="font-medium text-zinc-900 dark:text-zinc-100">
                         {customersById.get(o.customer_id) ?? "—"}
                       </span>
-                      <span className="mt-0.5 block text-sm font-semibold tabular-nums text-zinc-600">
+                      <span className="mt-0.5 block text-sm font-semibold tabular-nums text-zinc-600 dark:text-zinc-400">
                         ID {o.customer_id}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right align-middle">
-                      <span className="text-lg font-semibold text-zinc-950">
+                      <span className="text-lg font-semibold text-zinc-950 dark:text-zinc-100">
                         ${Number(o.order_total).toFixed(2)}
                       </span>
                     </td>
@@ -396,8 +396,8 @@ export default function AdminPage() {
                       <span
                         className={`inline-block min-w-[3.25rem] text-xl font-bold ${
                           o.risk_score != null && Number(o.risk_score) >= 42
-                            ? "text-amber-700"
-                            : "text-zinc-950"
+                            ? "text-amber-700 dark:text-amber-400"
+                            : "text-zinc-950 dark:text-zinc-100"
                         }`}
                       >
                         {o.risk_score != null
@@ -407,11 +407,11 @@ export default function AdminPage() {
                     </td>
                     <td className="px-4 py-3 text-center align-middle">
                       {orderNeedsReview(o) ? (
-                        <span className="inline-block min-w-[2.5rem] rounded-md bg-red-100 px-2.5 py-1 text-sm font-bold text-red-900">
+                        <span className="inline-block min-w-[2.5rem] rounded-md bg-red-100 px-2.5 py-1 text-sm font-bold text-red-900 dark:bg-red-950 dark:text-red-200">
                           Yes
                         </span>
                       ) : (
-                        <span className="text-sm font-semibold text-zinc-500">
+                        <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
                           No
                         </span>
                       )}
