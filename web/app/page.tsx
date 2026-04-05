@@ -19,12 +19,16 @@ export default function Home() {
 
   useEffect(() => {
     fetch("/api/customers")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) setErr(d.error);
-        else setCustomers(d.customers ?? []);
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) {
+          setErr(d.error ?? `Request failed (${r.status})`);
+          return;
+        }
+        setErr(null);
+        setCustomers(d.customers ?? []);
       })
-      .catch(() => setErr("Could not load customers."));
+      .catch(() => setErr("Network error: could not reach /api/customers."));
   }, []);
 
   return (

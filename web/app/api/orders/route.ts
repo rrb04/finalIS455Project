@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiErrorMessage } from "@/lib/apiError";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET() {
@@ -74,10 +75,13 @@ export async function POST(req: Request) {
       })
       .select("order_id")
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error("POST /api/orders", error);
+      return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
+    }
     return NextResponse.json({ ok: true, order_id: data.order_id });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to create order";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("POST /api/orders", e);
+    return NextResponse.json({ error: apiErrorMessage(e) }, { status: 500 });
   }
 }

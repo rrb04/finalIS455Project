@@ -99,8 +99,11 @@ pip install pandas numpy scikit-learn xgboost matplotlib seaborn scipy statsmode
 
 ## If something breaks
 
-- **“Missing SUPABASE_SERVICE_ROLE_KEY”** — Add it to Vercel (and `.env.local` locally). The app’s API routes need the **service role** key.
-- **Empty customer list** — Run **`supabase/seed.sql`** or insert rows into `customers` in Supabase.
-- **Build fails on Vercel** — Confirm **Root Directory** = **`web`** and Node version is compatible (default on Vercel is usually fine).
+- **“Failed to load customers” / red error on home page** — Open **`/api/customers`** in the browser (e.g. `http://localhost:3000/api/customers` or your Vercel URL + `/api/customers`). The JSON `error` field now shows the **real** Supabase message (not a generic failure).
+- **“Missing … SUPABASE_SERVICE_ROLE_KEY”** — Add all three env vars to **`web/.env.local`** (local) **or** Vercel → **Settings → Environment Variables** (production). After changing Vercel env vars, **Redeploy**. Local: restart `npm run dev` after editing `.env.local`.
+- **“relation … does not exist” / schema cache** — In Supabase **SQL Editor**, run **`supabase/schema.sql`**, then **`supabase/seed.sql`**, in that order. Tables must exist before the app can read them.
+- **Works locally but not on Vercel** — Vercel does not read `.env.local`; you must set the same variables in the Vercel project and redeploy.
+- **Empty customer list (no error)** — Seed data missing; run **`seed.sql`** or insert rows into `customers`.
+- **Build fails on Vercel** — **Root Directory** = **`web`**.
 
 Good luck.
