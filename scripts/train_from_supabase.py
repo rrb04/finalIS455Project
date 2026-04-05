@@ -15,6 +15,7 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 import numpy as np
 import pandas as pd
@@ -32,6 +33,38 @@ FROM public.orders o
 JOIN public.customers c ON o.customer_id = c.customer_id
 WHERE o.is_fraud IN (0, 1)
 """
+
+
+def encode_password_in_postgres_url(url: str) -> str:
+    """
+    URI passwords must percent-encode special characters (e.g. % -> %25).
+    Raw '%' in a Supabase password breaks psycopg2.parse_dsn with "invalid percent-encoded token".
+    """
+    for scheme in ("postgresql://", "postgres://"):
+        if url.startswith(scheme):
+            rest = url[len(scheme) :]
+            break
+    else:
+        return url
+    if "@" not in rest:
+        return url
+    userinfo, hostpart = rest.rsplit("@", 1)
+    if ":" not in userinfo:
+        return url
+    user, password = userinfo.split(":", 1)
+    return f"{scheme}{user}:{quote(password, safe='')}@{hostpart}"
+
+
+def connect_postgres(url: str):
+    try:
+        return psycopg2.connect(url)
+    except psycopg2.ProgrammingError as e:
+        msg = str(e).lower()
+        if "percent" in msg or "invalid dsn" in msg:
+            fixed = encode_password_in_postgres_url(url)
+            if fixed != url:
+                return psycopg2.connect(fixed)
+        raise
 
 
 def build_xy(df: pd.DataFrame):
@@ -71,7 +104,7 @@ def main() -> int:
 
     thresh = float(os.environ.get("REVIEW_THRESHOLD_PROB", "0.42"))
 
-    df = pd.read_sql_query(QUERY, psycopg2.connect(url))
+    df = pd.read_sql_query(QUERY, connect_postgres(url))
     if len(df) < 30:
         print(f"Need at least 30 labeled rows; got {len(df)}.", file=sys.stderr)
         return 1
@@ -116,7 +149,7 @@ def main() -> int:
         "trained_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    conn = psycopg2.connect(url)
+    conn = connect_postgres(url)
     try:
         with conn.cursor() as cur:
             cur.execute(
