@@ -1,0 +1,9 @@
+{
+  "accuracy": 0.9658634538152611,
+  "f1_score": 0.949091565444618,
+  "roc_auc": 0.6347071052953406,
+  "best_model_name": "Linear",
+  "best_params": {
+    "classifier__C": 0.1
+  }
+}

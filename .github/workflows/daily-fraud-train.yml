@@ -1,4 +1,5 @@
-# Retrains the fraud model from Supabase and updates ml_scoring_config.
+# Retrains the notebook-aligned pipeline (XGBoost + preprocessing), saves
+# artifacts/model.joblib, scores all orders, and updates priority ranks.
 # Add repo secret DATABASE_URL (Settings → Secrets → Actions) with the
 # Supabase Postgres connection string (same as in Project Settings → Database).
 
@@ -22,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements-train.txt
 
-      - name: Train and upload config
+      - name: Train notebook pipeline and score orders
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python scripts/train_from_supabase.py

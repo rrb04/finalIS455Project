@@ -4,7 +4,8 @@ This project has:
 
 - **`web/`** — Next.js app (deploy this to Vercel). It talks to **Supabase** (Postgres). It does **not** run Python; scoring runs in a Node API route (your real model is trained in the notebook).
 - **`pipeline.ipynb`** — CRISP-DM notebook. By default it reads **`shop.db`** (SQLite). You can point it at **Supabase** instead (same `orders`/`customers` join as production) with `DATA_SOURCE=supabase` and `DATABASE_URL` set to your Postgres connection string.
-- **`scripts/train_from_supabase.py`** — Trains a **logistic fraud model** on all labeled rows in Supabase and saves weights into **`ml_scoring_config`** so **`/api/score`** can use them (Python does not run on Vercel).
+- **`scripts/fraud_model.py`** — Shared training code: **same** deployable logistic model as **`pipeline.ipynb`** Phase 6 and **`scripts/train_from_supabase.py`**.
+- **`scripts/train_from_supabase.py`** — Loads labeled rows from Supabase, calls **`fraud_model`**, writes **`ml_scoring_config`** for **`/api/score`** (GitHub Actions runs this daily if configured).
 - **`supabase/ml_scoring_config.sql`** — Adds the `ml_scoring_config` table (run once if you already applied an older `schema.sql` without this table). Fresh installs: **`schema.sql`** already includes it.
 - **`supabase/seed.sql`** — Generated from your **`shop.db`** (`python scripts/generate_seed_sql.py`): **all** customers and **all** orders from SQLite. Run in Supabase after **`schema.sql`** so Postgres matches your local DB for training and the app.
 - **`create_shop_db.py`** — Optional: writes **`shop_synthetic.db`** only (never overwrites **`shop.db`**).
@@ -106,7 +107,8 @@ python scripts/train_from_supabase.py
 ```
 
 4. After a successful run, **Run scoring** on **`/admin`** uses the trained model. If no row exists in **`ml_scoring_config`**, scoring falls back to the built-in heuristic.
-5. **Automated daily retrain:** add **`DATABASE_URL`** as a **GitHub Actions secret** on your repo. The workflow **`.github/workflows/daily-fraud-train.yml`** runs on a schedule (and can be triggered manually). Adjust the cron time if you prefer a different UTC hour.
+5. **Automated daily retrain:** add **`DATABASE_URL`** as a **GitHub Actions secret** on your repo. The workflow **`.github/workflows/daily-fraud-train.yml`** runs **`train_from_supabase.py`** (same logic as the notebook Phase 6) on a schedule (and can be triggered manually). Adjust the cron time if you prefer a different UTC hour.
+6. **Notebook alignment:** Phase 6 saves **`model.joblib`** / **`metrics_production.json`** from **`fraud_model`** — submit those with your assignment; the live site still uses **JSON in Supabase**, not the `.joblib` file.
 
 ---
 
@@ -119,7 +121,7 @@ python scripts/train_from_supabase.py
 | Admin order history | `/admin` |
 | Run scoring → refresh priority queue | **Run scoring** on `/admin` |
 | Notebook CRISP-DM + `is_fraud` | `pipeline.ipynb` + `shop.db` (or Supabase via `DATA_SOURCE`) |
-| Daily fraud model → live scoring | `scripts/train_from_supabase.py` + `ml_scoring_config` table |
+| Daily fraud model → live scoring | `scripts/fraud_model.py` + `train_from_supabase.py` + `ml_scoring_config` |
 | Live URL | Your Vercel **Production** link |
 
 ---
