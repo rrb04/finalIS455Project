@@ -6,7 +6,7 @@ This project has:
 - **`pipeline.ipynb`** — CRISP-DM notebook. By default it reads **`shop.db`** (SQLite). You can point it at **Supabase** instead (same `orders`/`customers` join as production) with `DATA_SOURCE=supabase` and `DATABASE_URL` set to your Postgres connection string.
 - **`scripts/train_from_supabase.py`** — Trains a **logistic fraud model** on all labeled rows in Supabase and saves weights into **`ml_scoring_config`** so **`/api/score`** can use them (Python does not run on Vercel).
 - **`supabase/ml_scoring_config.sql`** — Adds the `ml_scoring_config` table (run once if you already applied an older `schema.sql` without this table). Fresh installs: **`schema.sql`** already includes it.
-- **`supabase/seed.sql`** — Generated from your **`shop.db`** (`python scripts/generate_seed_sql.py`). Run in Supabase after **`schema.sql`** so Postgres matches SQLite.
+- **`supabase/seed.sql`** — Generated from your **`shop.db`** (`python scripts/generate_seed_sql.py`): **all** customers and **all** orders from SQLite. Run in Supabase after **`schema.sql`** so Postgres matches your local DB for training and the app.
 - **`create_shop_db.py`** — Optional: writes **`shop_synthetic.db`** only (never overwrites **`shop.db`**).
 
 ---
