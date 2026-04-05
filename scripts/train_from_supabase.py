@@ -12,6 +12,7 @@ pip install pandas numpy scikit-learn psycopg2-binary
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 from datetime import datetime, timezone
@@ -33,6 +34,19 @@ FROM public.orders o
 JOIN public.customers c ON o.customer_id = c.customer_id
 WHERE o.is_fraud IN (0, 1)
 """
+
+
+def sanitize_for_jsonb(obj: object) -> object:
+    """JSON / Postgres jsonb do not allow NaN or Infinity; sklearn may emit them."""
+    if isinstance(obj, dict):
+        return {str(k): sanitize_for_jsonb(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_jsonb(v) for v in obj]
+    if isinstance(obj, (float, np.floating)):
+        v = float(obj)
+        if math.isnan(v) or math.isinf(v):
+            return None
+    return obj
 
 
 def _split_postgres_url(url: str) -> tuple[str, str, str] | None:
@@ -169,6 +183,8 @@ def main() -> int:
 
     try:
         val_auc = roc_auc_score(y_val, lr.predict_proba(X_val)[:, 1])
+        if val_auc is not None and (math.isnan(float(val_auc)) or math.isinf(float(val_auc))):
+            val_auc = None
     except ValueError:
         val_auc = None
 
@@ -202,13 +218,16 @@ def main() -> int:
                   trained_at = excluded.trained_at,
                   metrics = excluded.metrics
                 """,
-                (json.dumps(config), json.dumps(metrics)),
+                (
+                    json.dumps(sanitize_for_jsonb(config)),
+                    json.dumps(sanitize_for_jsonb(metrics)),
+                ),
             )
         conn.commit()
     finally:
         conn.close()
 
-    print(json.dumps({"ok": True, "metrics": metrics}, indent=2))
+    print(json.dumps(sanitize_for_jsonb({"ok": True, "metrics": metrics}), indent=2))
     return 0
 
 
