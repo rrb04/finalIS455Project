@@ -7,9 +7,11 @@ import {
 } from "@/lib/scoringFromConfig";
 
 /**
- * Risk scoring without Python on Vercel.
- * If `ml_scoring_config` has a row (from daily `train_from_supabase.py`), uses
- * those logistic coefficients; otherwise falls back to a static heuristic.
+ * Risk scoring on Vercel (no sklearn). Rows already scored by the batch Python
+ * job (`scripts/score_supabase_orders.py` after train) keep DB risk_score /
+ * needs_review when `scored_at` is set. Unscored rows (e.g. new orders) use
+ * legacy `ml_scoring_config` if present, else a static heuristic. Then all
+ * rows are sorted by risk and priority_rank / scored_at are updated.
  */
 const MAX_TOTAL = 2053.11;
 
@@ -48,7 +50,7 @@ export async function POST() {
 
     const { data: orders, error: oErr } = await supabase
       .from("orders")
-      .select("order_id, customer_id, order_total");
+      .select("order_id, customer_id, order_total, risk_score, needs_review, scored_at");
     if (oErr) {
       console.error("POST /api/score orders", oErr);
       return NextResponse.json({ error: apiErrorMessage(oErr) }, { status: 500 });
@@ -67,6 +69,19 @@ export async function POST() {
     const scored = (orders ?? []).map((o) => {
       const total = Number(o.order_total);
       const segment = segById.get(o.customer_id) ?? null;
+      const batchScored =
+        o.scored_at != null &&
+        o.scored_at !== "" &&
+        o.risk_score != null &&
+        !Number.isNaN(Number(o.risk_score));
+      if (batchScored) {
+        const risk_score = Number(o.risk_score);
+        return {
+          order_id: o.order_id,
+          risk_score,
+          needs_review: Boolean(o.needs_review),
+        };
+      }
       if (isValidScoringConfig(mlCfg)) {
         const { risk_score, needs_review } = riskScoreFromConfig(
           total,
